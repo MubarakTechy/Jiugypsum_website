@@ -88,26 +88,60 @@ export default function QuoteForm() {
 
     busy.current = true;
     setStatus("sending");
-    track("quote_form_submit"); // attempt; success is tracked separately after the server confirms
+    track("quote_form_submit"); // records a submission attempt
+
     fd.delete("photos");
     files.forEach((f) => fd.append("photos", f, f.name));
     fd.set("startedAt", String(startedAt.current));
 
+    // Open a tab directly from the submit interaction so browsers are less
+    // likely to block the WhatsApp handoff after the API request completes.
+    const whatsappTab = window.open("about:blank", "_blank");
+
     try {
-      const res = await fetch("/api/quote", { method: "POST", body: fd });
+      const res = await fetch("/api/quote", {
+        method: "POST",
+        body: fd,
+      });
       const body = await res.json().catch(() => ({}));
-      if (res.ok && body.ok) {
-        track("quote_form_success", { service: String(fd.get("service") ?? "") });
-        setDone({ ref: body.reference, name: String(fd.get("fullName")).split(" ")[0] });
+
+      if (res.ok && body.ok && typeof body.whatsappUrl === "string") {
+        // This is a handoff to WhatsApp, not proof that the customer sent it.
+        if (whatsappTab) {
+          whatsappTab.opener = null;
+          whatsappTab.location.href = body.whatsappUrl;
+        } else {
+          // Fallback if the browser blocks opening a new tab.
+          window.location.assign(body.whatsappUrl);
+          return;
+        }
+
+        track("quote_whatsapp_opened", {
+          service: String(fd.get("service") ?? ""),
+        });
+
+        setDone({
+          ref: String(body.reference ?? "JQ-RECEIVED"),
+          name: String(fd.get("fullName") ?? "").trim().split(/\s+/)[0] || "there",
+        });
         setStatus("success");
         window.scrollTo({ top: 0, behavior: "smooth" });
         return;
       }
+
+      whatsappTab?.close();
+
       if (body.errors) setErrors(body.errors);
-      setFormError(body.error ?? "Something went wrong. Please try again.");
+      setFormError(
+        body.error ?? "Something went wrong. Please try again."
+      );
     } catch {
-      setFormError("We couldn't reach the server. Check your connection and try again. Everything you entered is still here.");
+      whatsappTab?.close();
+      setFormError(
+        "We couldn't reach the server. Check your connection and try again. Everything you entered is still here."
+      );
     }
+
     busy.current = false;
     setStatus("idle"); // form stays mounted, so entered data is preserved
   }
@@ -116,16 +150,21 @@ export default function QuoteForm() {
     return (
       <div className="form-card success" role="status" aria-live="polite">
         <div className="tick"><Check /></div>
-        <h2>Thank you, {done.name}. We&apos;ve got your request.</h2>
-        <p>Your reference is <span className="ref">{done.ref}</span></p>
-        <p>Here&apos;s what happens next:</p>
+        <h2>Almost there, {done.name}.</h2>
+        <p>Your quote reference is <span className="ref">{done.ref}</span>.</p>
+        <p>
+          We&apos;ve prepared your project details in WhatsApp. Please press
+          <strong> Send </strong> in the WhatsApp chat to deliver your enquiry
+          to Jiugypsum.
+        </p>
+        <p>After you send it:</p>
         <ol className="next-steps">
-          <li><span>Our team reviews the details you sent.</span></li>
-          <li><span>We contact you on the phone number or email you gave to ask any questions and discuss the requirements.</span></li>
-          <li><span>We take it from there toward your quotation and, once you&apos;re happy, confirm scope and schedule.</span></li>
+          <li><span>Our team can review your project details and requirements.</span></li>
+          <li><span>We&apos;ll use the phone number or email you provided to discuss any questions and your quotation.</span></li>
+          <li><span>We can then confirm the project scope and schedule with you.</span></li>
         </ol>
         <p style={{ marginTop: "1.5rem" }}>
-          Have more photos or drawings? <a href={whatsappUrl(`Hello Jiugypsum, my quote reference is ${done.ref}. I'd like to send more details.`)} target="_blank" rel="noopener noreferrer" style={{ textDecoration: "underline", fontWeight: 700 }}>Send them on WhatsApp</a>.
+          <strong>Have photos or drawings?</strong> WhatsApp links can&apos;t attach the photos you selected on this form automatically. Please attach them manually in the WhatsApp chat, or <a href={whatsappUrl(`Hello Jiugypsum, my quote reference is ${done.ref}. I'd like to send more project photos or drawings.`)} target="_blank" rel="noopener noreferrer" style={{ textDecoration: "underline", fontWeight: 700 }}>open WhatsApp to send more details</a>.
         </p>
       </div>
     );
@@ -225,10 +264,10 @@ export default function QuoteForm() {
       </fieldset>
 
       <button type="submit" className="btn btn--primary btn--block" disabled={status === "sending"}>
-        {status === "sending" ? (<><span className="spinner" aria-hidden /> Sending your request…</>) : (<>Send My Request <ArrowRight /></>)}
+        {status === "sending" ? (<><span className="spinner" aria-hidden /> Preparing WhatsApp…</>) : (<>Continue to WhatsApp <ArrowRight /></>)}
       </button>
       <p className="privacy-note">
-        We use these details only to respond to your request and prepare your quotation. Photos are sent to our team by email and are not published. See our <Link href="/privacy">Privacy Policy</Link>.
+        We use these details only to respond to your request and prepare your quotation. Selected photos are included in the email notification when email delivery is configured; they are not attached to WhatsApp automatically. See our <Link href="/privacy">Privacy Policy</Link>.
       </p>
     </form>
   );

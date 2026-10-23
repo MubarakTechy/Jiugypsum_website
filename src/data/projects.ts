@@ -29,7 +29,7 @@ export const projects: Project[] = [
     category: "Feature Walls",
     stage: "Finished",
     description: "A sculpted gypsum wall profile in a dark textured finish, lit along its edge with warm concealed LEDs.",
-    image: { src: "/images/projects/lighting.jpg", width: 952, height: 1080, alt: "Dark textured curved feature wall lit by a warm concealed LED strip along its edge" },
+    image: { src: "/images/projects/download.jpg", width: 952, height: 1080, alt: "Dark textured curved feature wall lit by a warm concealed LED strip along its edge" },
   },
    {
     slug: "rounded-tray-ceiling",
@@ -94,7 +94,7 @@ export const projects: Project[] = [
     description:
       "A contemporary TV feature wall combining decorative wall panels with integrated ambient lighting.",
     image: {
-      src: "/images/projects/Modern TV.jpg",
+      src: "/images/projects/download (1).jpg",
       width: 1600,
       height: 1200,
       alt: "Modern TV feature wall with decorative panels and integrated ambient lighting",
@@ -217,7 +217,7 @@ export const projects: Project[] = [
     category: "Drywall",
     stage: "In progress",
     description: "A drywall ceiling bulkhead being built in a large open space, with scaffolding in place.",
-    image: { src: "/images/projects/blackimage.jpg", width: 1080, height: 1080, alt: "Large open hall with a green drywall ceiling bulkhead and scaffolding" },
+    image: { src: "/images/projects/Ceiling tv.jpg", width: 1080, height: 1080, alt: "Large open hall with a green drywall ceiling bulkhead and scaffolding" },
   },
 
     {

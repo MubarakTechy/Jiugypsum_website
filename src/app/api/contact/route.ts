@@ -1,57 +1,123 @@
+
+import { NextResponse } from "next/server";
 import { validateContact } from "@/lib/validation";
-import { clientIp, rateLimited } from "@/lib/rate-limit";
-import { mailConfigured, rowsToHtml, sendNotification } from "@/lib/mail";
 
 export const runtime = "nodejs";
 
-const json = (body: unknown, status = 200) => Response.json(body, { status, headers: { "Cache-Control": "no-store" } });
-
-export async function POST(req: Request) {
-  if (rateLimited(`contact:${clientIp(req)}`, 5, 10 * 60 * 1000)) {
-    return json({ ok: false, error: "You've sent several messages recently. Please wait a few minutes or contact us on WhatsApp." }, 429);
-  }
-
-  let body: Record<string, unknown>;
+export async function POST(request: Request) {
   try {
-    body = await req.json();
-  } catch {
-    return json({ ok: false, error: "We couldn't read your message. Please try again." }, 400);
-  }
+    const data: unknown = await request.json();
 
-  if (String(body.company_website ?? "").trim()) return json({ ok: true });
+    if (
+      !data ||
+      typeof data !== "object" ||
+      Array.isArray(data)
+    ) {
+      return NextResponse.json(
+        { ok: false, error: "Invalid form submission." },
+        { status: 400 }
+      );
+    }
 
-  const startedAt = Number(body.startedAt);
-  if (Number.isFinite(startedAt) && Date.now() - startedAt < 2000) {
-    return json({ ok: false, error: "That was very quick. Please check your message and send again." }, 400);
-  }
+    const formData = data as Record<string, unknown>;
 
-  const { values, errors } = validateContact(body);
-  if (Object.keys(errors).length) return json({ ok: false, error: "Please fix the highlighted fields.", errors }, 422);
+    // Basic bot protection: reject a filled honeypot field.
+    if (formData.company_website) {
+      return NextResponse.json(
+        { ok: false, error: "Unable to process this submission." },
+        { status: 400 }
+      );
+    }
 
-  if (!mailConfigured()) {
-    console.error("[contact] SMTP is not configured. Message NOT delivered.");
-    return json({ ok: false, error: "Our contact form is temporarily unavailable. Please call or WhatsApp us." }, 503);
-  }
+    // Ensure required fields are strings before validation.
+    const fields = [
+      "fullName",
+      "contact",
+      "enquiryType",
+      "message",
+    ] as const;
 
-  const isEmail = values.contact.includes("@");
-  const rows: [string, string][] = [
-    ["Name", values.fullName],
-    [isEmail ? "Email" : "Phone", values.contact],
-    ["Enquiry type", values.enquiryType],
-    ["Message", values.message],
-  ];
+    for (const field of fields) {
+      if (typeof formData[field] !== "string") {
+        return NextResponse.json(
+          {
+            ok: false,
+            errors: { [field]: "Please enter a valid value." },
+            error: "Please check your details.",
+          },
+          { status: 400 }
+        );
+      }
+    }
 
-  try {
-    await sendNotification({
-      subject: `Website enquiry: ${values.enquiryType} (${values.fullName})`,
-      text: rows.map(([k, v]) => `${k}: ${v}`).join("\n"),
-      html: rowsToHtml("New website enquiry", rows),
-      replyTo: isEmail ? values.contact : undefined,
+    const { errors } = validateContact({
+      fullName: formData.fullName as string,
+      contact: formData.contact as string,
+      enquiryType: formData.enquiryType as string,
+      message: formData.message as string,
     });
-  } catch (err) {
-    console.error("[contact] mail delivery failed:", err);
-    return json({ ok: false, error: "We couldn't send your message just now. Please try again, or call or WhatsApp us." }, 502);
-  }
 
-  return json({ ok: true });
+    if (Object.keys(errors).length > 0) {
+      return NextResponse.json(
+        {
+          ok: false,
+          errors,
+          error: "Please check your details.",
+        },
+        { status: 400 }
+      );
+    }
+
+    const businessNumber =
+      process.env.WHATSAPP_BUSINESS_NUMBER?.replace(/\D/g, "");
+
+    if (!businessNumber) {
+      console.error("WhatsApp business number is not configured.");
+
+      return NextResponse.json(
+        {
+          ok: false,
+          error: "The contact service is not configured yet.",
+        },
+        { status: 500 }
+      );
+    }
+
+    const name = (formData.fullName as string).trim();
+    const contact = (formData.contact as string).trim();
+    const enquiryType = (formData.enquiryType as string).trim();
+    const message = (formData.message as string).trim();
+
+    const whatsappMessage = [
+      "Hello Jiugypsum, I'd like to discuss a project.",
+      "",
+      "New enquiry from the website contact form",
+      "",
+      `Name: ${name}`,
+      `Contact: ${contact}`,
+      `Enquiry type: ${enquiryType}`,
+      "",
+      "Message:",
+      message,
+    ].join("\n");
+
+    const whatsappUrl =
+      `https://wa.me/${businessNumber}?text=` +
+      encodeURIComponent(whatsappMessage);
+
+    return NextResponse.json({
+      ok: true,
+      whatsappUrl,
+    });
+  } catch (error) {
+    console.error("Contact API error:", error);
+
+    return NextResponse.json(
+      {
+        ok: false,
+        error: "Something went wrong. Please try again.",
+      },
+      { status: 500 }
+    );
+  }
 }
