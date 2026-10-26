@@ -57,10 +57,12 @@ export function whatsappUrl(text = "Hello Jiugypsum, I'd like to discuss a proje
 
 export const nav = [
   { label: "Home", href: "/" },
-  { label: "Services", href: "/services" },
+  { label: "Project", href: "/project" },
   { label: "Gallery", href: "/gallery" },
   { label: "About Us", href: "/about" },
+  { label: "Services", href: "/services" },
   { label: "Contact Us", href: "/contact" },
+  
 ] as const;
 
 export const QUOTE_HREF = "/get-a-quote";
